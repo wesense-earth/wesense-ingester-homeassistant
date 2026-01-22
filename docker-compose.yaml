@@ -1,0 +1,55 @@
+version: '3.8'
+
+services:
+  homeassistant-ingester:
+    build: .
+    container_name: wesense-ingester-homeassistant
+    restart: unless-stopped
+    environment:
+      # Home Assistant connection
+      - HA_URL=${HA_URL:-http://homeassistant.local:8123}
+      - HA_ACCESS_TOKEN=${HA_ACCESS_TOKEN}
+
+      # Output MQTT broker
+      - LOCAL_MQTT_BROKER=${LOCAL_MQTT_BROKER:-localhost}
+      - LOCAL_MQTT_PORT=${LOCAL_MQTT_PORT:-1883}
+
+      # ClickHouse
+      - CLICKHOUSE_HOST=${CLICKHOUSE_HOST:-localhost}
+      - CLICKHOUSE_PORT=${CLICKHOUSE_PORT:-8123}
+      - CLICKHOUSE_DATABASE=${CLICKHOUSE_DATABASE:-wesense}
+      - CLICKHOUSE_TABLE=${CLICKHOUSE_TABLE:-sensor_readings}
+
+      # Application settings
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+      - TZ=${TZ:-UTC}
+      - DISABLE_CLICKHOUSE=${DISABLE_CLICKHOUSE:-false}
+
+    volumes:
+      # Mount config directory (contains config.yaml)
+      - ./config:/app/config:ro
+      # Mount logs directory
+      - ./logs:/app/logs
+
+    # Use host network for easy access to local services
+    # Change to bridge network with explicit ports if needed
+    network_mode: host
+
+    # Alternative: use bridge network
+    # networks:
+    #   - wesense
+    #
+    # networks:
+    #   wesense:
+    #     external: true
+
+  # Optional: Local MQTT broker for testing
+  # mqtt:
+  #   image: eclipse-mosquitto:2
+  #   container_name: mqtt-broker
+  #   ports:
+  #     - "1883:1883"
+  #   volumes:
+  #     - ./mosquitto/config:/mosquitto/config
+  #     - ./mosquitto/data:/mosquitto/data
+  #     - ./mosquitto/log:/mosquitto/log
