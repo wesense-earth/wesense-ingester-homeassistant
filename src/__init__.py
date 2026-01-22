@@ -1,0 +1,1 @@
+# WeSense Home Assistant Ingester

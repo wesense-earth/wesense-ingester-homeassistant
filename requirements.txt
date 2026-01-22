@@ -1,0 +1,21 @@
+# WeSense Home Assistant Ingester Dependencies
+
+# Async HTTP/WebSocket
+aiohttp>=3.9.0
+websockets>=12.0
+
+# MQTT
+paho-mqtt>=2.0.0
+
+# ClickHouse (pinned to match meshtastic ingester)
+clickhouse-connect==0.8.14
+
+# Configuration
+pyyaml>=6.0
+python-dotenv>=1.0.0
+
+# Geocoding
+reverse_geocoder>=1.5.1
+
+# Utilities
+python-dateutil>=2.8.0

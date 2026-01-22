@@ -1,0 +1,130 @@
+# WeSense Home Assistant Ingester Configuration
+# Copy to config.yaml and customize for your deployment
+
+# ==============================================================================
+# MAIN SETTINGS - Configure these first
+# ==============================================================================
+
+# Node name - friendly device name shown on map (max 24 chars)
+# Same concept as NODE_NAME in ESP32 sensors
+# Can be overridden per-entity in location.overrides
+node_name: ""  # e.g., "HA_Kitchen", "HA_Office"
+
+# Home Assistant connection
+homeassistant:
+  url: "http://homeassistant.local:8123"
+  access_token: "${HA_ACCESS_TOKEN}"  # Or paste token directly in quotes
+  # Create token at: Profile (click your name) → Security tab → Long-lived access tokens
+  mode: websocket  # "websocket" (real-time) or "polling"
+  polling:
+    interval_seconds: 60  # Only used if mode is "polling"
+
+# Output MQTT broker (where WeSense data is published)
+output:
+  mqtt:
+    broker: localhost  # Change to your MQTT broker IP, e.g., 192.168.43.11
+    port: 1883
+    # username: your_username
+    # password: your_password
+    client_id: ingester-homeassistant-output
+    topic_prefix: "wesense/decoded"
+
+# ClickHouse database (for time-series storage)
+clickhouse:
+  host: localhost  # Change to your ClickHouse server IP
+  port: 8123
+  database: wesense
+  table: sensor_readings
+  user: default
+  password: ""
+  batch_size: 100
+  flush_interval_seconds: 5
+
+# Default location for all sensors (REQUIRED - sensors without location are rejected)
+location:
+  default:
+    latitude: -36.8485
+    longitude: 174.7633
+    altitude: 50  # meters above sea level
+    country_code: "nz"
+    subdivision_code: "auk"
+    deployment_type: "INDOOR"  # INDOOR, OUTDOOR, or MIXED
+  use_ha_zones: true
+  # Per-entity overrides - see ADVANCED SETTINGS below
+
+# ==============================================================================
+# OPERATIONAL SETTINGS
+# ==============================================================================
+
+# Safety mode - log what would be published without actually publishing
+dry_run: false
+
+# MQTT-only mode - publish to MQTT but skip ClickHouse writes
+# Can also be set via DISABLE_CLICKHOUSE=true environment variable
+disable_clickhouse: true
+
+# Logging level: DEBUG, INFO, WARNING, ERROR
+logging:
+  level: INFO
+
+# ==============================================================================
+# ENTITY FILTERING - CRITICAL FOR LOOP PREVENTION
+# ==============================================================================
+# WeSense ESP32 devices publish directly to Home Assistant via MQTT discovery.
+# Without proper filtering, this ingester would re-import that data, creating loops.
+# ==============================================================================
+filters:
+  mode: denylist  # "denylist" (exclude matches) or "allowlist" (include only matches)
+
+  # Domain filtering - which Home Assistant domains to consider
+  include_domains:
+    - sensor
+    - binary_sensor
+
+  # Device class filtering - only ingest environmental sensors
+  include_device_classes:
+    - temperature
+    - humidity
+    - pressure
+    - atmospheric_pressure
+    - carbon_dioxide
+    - carbon_monoxide
+    - pm1
+    - pm10
+    - pm25
+    - volatile_organic_compounds
+    - nitrogen_dioxide
+    - ozone
+    - illuminance
+
+  # LOOP PREVENTION PATTERNS
+  # These patterns match WeSense ESP32 sensors (MAC address in entity ID)
+  exclude_entity_patterns:
+    - ".*_[0-9a-f]{12}_.*"  # WeSense ESP32 MAC pattern
+    - "meshtastic_.*"
+    - ".*meshtastic.*"
+    - "wesense_.*"
+    - ".*wesense.*"
+
+  # Exclude by device manufacturer
+  exclude_manufacturers:
+    - "WeSense"
+    - "Meshtastic"
+
+  exclude_integrations: []
+  exclude_entities: []
+  include_entities: []  # Only used in allowlist mode
+
+# ==============================================================================
+# ADVANCED SETTINGS - Per-entity overrides
+# ==============================================================================
+# Override location and node_name per entity:
+#
+# location:
+#   overrides:
+#     "sensor.garage_temperature":
+#       node_name: "HA_Garage"        # Override node name for this sensor
+#       latitude: -36.8500
+#       longitude: 174.7650
+#       altitude: 55
+#       deployment_type: "OUTDOOR"
