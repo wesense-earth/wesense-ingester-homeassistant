@@ -13,6 +13,8 @@ import time
 from datetime import datetime
 from typing import Any, Optional
 
+from wesense_ingester import setup_logging as core_setup_logging
+
 from .config import Config, load_config, validate_config
 from .entity_filter import EntityFilter
 from .ha_client import EntityMetadata, HomeAssistantClient
@@ -328,21 +330,6 @@ class HomeAssistantIngester:
             logger.info(f"  Filter stats: {filter_stats}")
 
 
-def setup_logging(level: str):
-    """Configure logging."""
-    logging.basicConfig(
-        level=getattr(logging, level.upper(), logging.INFO),
-        format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-        handlers=[
-            logging.StreamHandler(sys.stdout),
-        ],
-    )
-
-    # Reduce noise from third-party libraries
-    logging.getLogger("aiohttp").setLevel(logging.WARNING)
-    logging.getLogger("websockets").setLevel(logging.WARNING)
-
-
 async def main():
     """Main entry point."""
     # Load configuration
@@ -352,8 +339,16 @@ async def main():
         print(f"Failed to load configuration: {e}")
         sys.exit(1)
 
-    # Setup logging
-    setup_logging(config.logging.level)
+    # Setup logging (core provides colored console + rotating file logs)
+    core_setup_logging(
+        "ha_ingester",
+        level=getattr(logging, config.logging.level.upper(), logging.INFO),
+        enable_future_timestamp_log=True,
+    )
+
+    # Reduce noise from third-party libraries
+    logging.getLogger("aiohttp").setLevel(logging.WARNING)
+    logging.getLogger("websockets").setLevel(logging.WARNING)
 
     # Validate configuration
     warnings = validate_config(config)
