@@ -1,0 +1,14 @@
+# Adapter-specific dependencies for wesense-ingester-homeassistant
+# Core dependencies (clickhouse-connect, paho-mqtt, reverse_geocoder) are
+# provided by wesense-ingester-core installed separately.
+
+# Home Assistant API client
+aiohttp>=3.9.0
+websockets>=12.0
+
+# Configuration
+pyyaml>=6.0
+python-dotenv>=1.0.0
+
+# Date parsing
+python-dateutil>=2.8.0

@@ -1,86 +1,47 @@
-"""Geocoding utilities for reverse geocoding coordinates."""
+"""Geocoding utilities for reverse geocoding coordinates.
+
+Uses wesense-ingester-core's ReverseGeocoder which has the full
+ISO 3166 mapper with comprehensive subdivision coverage.
+"""
 
 import logging
-from functools import lru_cache
 from typing import Optional
+
+from wesense_ingester import ReverseGeocoder
 
 logger = logging.getLogger(__name__)
 
-# Lazy load reverse_geocoder to avoid import errors if not installed
-_rg = None
+# Singleton geocoder instance (lazy init)
+_geocoder: Optional[ReverseGeocoder] = None
 
 
-def _get_reverse_geocoder():
-    """Lazily load reverse_geocoder module."""
-    global _rg
-    if _rg is None:
-        try:
-            import reverse_geocoder as rg
-
-            _rg = rg
-        except ImportError:
-            logger.warning("reverse_geocoder not installed - geocoding will use defaults")
-            _rg = False
-    return _rg
+def _get_geocoder() -> ReverseGeocoder:
+    """Get or create the singleton ReverseGeocoder."""
+    global _geocoder
+    if _geocoder is None:
+        _geocoder = ReverseGeocoder()
+    return _geocoder
 
 
-# ISO 3166-2 subdivision code mapping (GeoNames admin1 code to ISO subdivision)
-# This is a subset - expand as needed
-ADMIN1_TO_SUBDIVISION = {
-    # New Zealand
-    ("NZ", "E7"): "auk",  # Auckland
-    ("NZ", "F1"): "wgn",  # Wellington
-    ("NZ", "F3"): "can",  # Canterbury
-    ("NZ", "G2"): "ota",  # Otago
-    # USA (state FIPS codes)
-    ("US", "CA"): "ca",
-    ("US", "NY"): "ny",
-    ("US", "TX"): "tx",
-    ("US", "WA"): "wa",
-    # Australia
-    ("AU", "02"): "nsw",  # New South Wales
-    ("AU", "07"): "vic",  # Victoria
-    ("AU", "04"): "qld",  # Queensland
-    # UK
-    ("GB", "ENG"): "eng",
-    ("GB", "SCT"): "sct",
-    ("GB", "WLS"): "wls",
-}
-
-
-@lru_cache(maxsize=10000)
 def reverse_geocode(latitude: float, longitude: float) -> Optional[dict]:
     """
     Reverse geocode coordinates to country and subdivision.
 
-    Returns dict with keys: country_code, subdivision_code, country_name
+    Returns dict with keys: country_code, subdivision_code
     Returns None if geocoding fails.
     """
-    rg = _get_reverse_geocoder()
-    if not rg:
-        return None
-
     try:
-        results = rg.search([(latitude, longitude)], mode=1)
-        if not results:
+        geocoder = _get_geocoder()
+        result = geocoder.reverse_geocode(latitude, longitude)
+        if not result:
             return None
 
-        result = results[0]
-        country_code = result.get("cc", "").lower()
-        admin1 = result.get("admin1", "")
-
-        # Map admin1 to ISO 3166-2 subdivision code
-        subdivision_code = ADMIN1_TO_SUBDIVISION.get(
-            (result.get("cc"), admin1), admin1.lower()[:3]
-        )
-
         return {
-            "country_code": country_code,
-            "subdivision_code": subdivision_code,
-            "country_name": result.get("name", ""),
+            "country_code": result["geo_country"],
+            "subdivision_code": result["geo_subdivision"],
         }
     except Exception as e:
-        logger.warning(f"Geocoding failed for ({latitude}, {longitude}): {e}")
+        logger.warning("Geocoding failed for (%s, %s): %s", latitude, longitude, e)
         return None
 
 
