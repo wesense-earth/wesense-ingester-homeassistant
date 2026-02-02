@@ -335,6 +335,11 @@ async def main():
     # Load configuration
     try:
         config = load_config()
+    except FileNotFoundError as e:
+        print(f"Config not found: {e}")
+        print("Copy config/config.yaml.sample to config/config.yaml and configure it.")
+        print("Exiting cleanly (will not restart).")
+        sys.exit(0)
     except Exception as e:
         print(f"Failed to load configuration: {e}")
         sys.exit(1)
