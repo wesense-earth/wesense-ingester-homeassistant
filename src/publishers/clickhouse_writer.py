@@ -21,8 +21,7 @@ class ClickHouseWriter:
     and posts to the gateway. Retains the class name for import compat.
     """
 
-    def __init__(self, config: HAClickHouseConfig, dry_run: bool = False):
-        self.config = config
+    def __init__(self, config: HAClickHouseConfig = None, dry_run: bool = False):
         self.dry_run = dry_run
         self._gateway_client: Optional[GatewayClient] = None
         self._total_written_dry = 0
