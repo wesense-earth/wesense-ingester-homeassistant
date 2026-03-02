@@ -82,6 +82,8 @@ class ClickHouseWriter:
                 "latitude": data.get("latitude"),
                 "longitude": data.get("longitude"),
                 "altitude": data.get("altitude"),
+                "geo_country": data.get("country_code", ""),
+                "geo_subdivision": data.get("subdivision_code", ""),
                 "board_model": data.get("_meta", {}).get("device_class", ""),
                 "deployment_type": data.get("deployment_type", "INDOOR"),
                 "transport_type": data.get("transport_type", "UNKNOWN"),
