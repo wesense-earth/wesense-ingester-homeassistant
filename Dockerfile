@@ -27,6 +27,8 @@ RUN apt-get update && \
 # Copy application code
 COPY wesense-ingester-homeassistant/src/ ./src/
 COPY wesense-ingester-homeassistant/run.py ./
+COPY wesense-ingester-homeassistant/entrypoint.sh /app/entrypoint.sh
+RUN chmod +x /app/entrypoint.sh
 
 # Create directories for runtime data
 RUN mkdir -p /app/logs /app/config
@@ -35,4 +37,4 @@ ENV PYTHONUNBUFFERED=1
 ENV PYTHONPATH=/app
 ENV TZ=UTC
 
-CMD ["python", "run.py"]
+ENTRYPOINT ["/app/entrypoint.sh"]
