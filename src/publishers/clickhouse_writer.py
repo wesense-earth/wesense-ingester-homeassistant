@@ -73,8 +73,9 @@ class ClickHouseWriter:
             return {
                 "timestamp": data["timestamp"],
                 "device_id": data["device_id"],
-                "data_source": data.get("data_source", "HOMEASSISTANT"),
-                "network_source": "HOMEASSISTANT",
+                "data_source": data.get("data_source", "home_assistant"),
+                "data_source_name": data.get("data_source_name", "Home Assistant"),
+                "network_source": "api",
                 "ingestion_node_id": data.get("node_name", ""),
                 "reading_type": measurement["reading_type"],
                 "value": float(measurement["value"]),
@@ -86,7 +87,7 @@ class ClickHouseWriter:
                 "geo_subdivision": data.get("subdivision_code", ""),
                 "board_model": data.get("_meta", {}).get("device_class", ""),
                 "deployment_type": data.get("deployment_type", "INDOOR"),
-                "transport_type": data.get("transport_type", "UNKNOWN"),
+                "transport_type": data.get("transport_type", ""),
                 "node_name": data.get("node_name", ""),
             }
         except Exception as e:
