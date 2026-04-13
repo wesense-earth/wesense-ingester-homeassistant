@@ -7,22 +7,23 @@ Pulls sensor data from Home Assistant and publishes to WeSense ecosystem.
 
 import asyncio
 import logging
+import os
 import signal
 import sys
 import time
 from datetime import datetime
-from typing import Any, Optional
+from typing import Optional
 
-from wesense_ingester import setup_logging as core_setup_logging
+from wesense_ingester import ReadingPipeline, setup_logging as core_setup_logging
+from wesense_ingester.mqtt.publisher import MQTTPublisherConfig
 
 from .config import Config, load_config, validate_config
 from .entity_filter import EntityFilter
 from .ha_client import EntityMetadata, HomeAssistantClient
-from .publishers.clickhouse_writer import ClickHouseWriter, future_timestamp_logger
-from .publishers.mqtt_publisher import MQTTPublisher
 from .transformer import Transformer
 
 logger = logging.getLogger(__name__)
+future_timestamp_logger = logging.getLogger("ha_ingester.future_timestamps")
 
 # Future timestamp tolerance - reject readings more than 30 seconds in the future
 FUTURE_TIMESTAMP_TOLERANCE = 30
@@ -46,10 +47,24 @@ class HomeAssistantIngester:
         self.metadata = EntityMetadata()
         self.entity_filter: Optional[EntityFilter] = None
         self.transformer = Transformer(config, self.metadata)
-        self.mqtt_publisher = MQTTPublisher(config.mqtt, dry_run=config.dry_run)
-        # disable_clickhouse skips CH writes while still publishing to MQTT
-        clickhouse_dry_run = config.dry_run or config.disable_clickhouse
-        self.clickhouse_writer = ClickHouseWriter(config.clickhouse, dry_run=clickhouse_dry_run)
+
+        # Reading pipeline — handles signing, MQTT publish, gateway POST
+        mqtt_config = MQTTPublisherConfig(
+            broker=config.mqtt.broker,
+            port=config.mqtt.port,
+            username=config.mqtt.username,
+            password=config.mqtt.password,
+            client_id=config.mqtt.client_id,
+            use_tls=os.getenv("MQTT_USE_TLS", "").lower() in ("true", "1", "yes"),
+            ca_certfile=os.getenv("TLS_CA_CERTFILE"),
+        )
+        self.pipeline = ReadingPipeline(
+            name="homeassistant",
+            mqtt_config=mqtt_config,
+            enable_dedup=False,  # HA doesn't need dedup (single source)
+            enable_geocoder=False,  # HA provides geo from config
+        )
+
         self._running = False
         self._stop_event = asyncio.Event()
         self._stats = {
@@ -66,18 +81,7 @@ class HomeAssistantIngester:
         """Start the ingester."""
         logger.info("Starting Home Assistant Ingester")
         logger.info(f"Mode: {'DRY-RUN' if self.config.dry_run else 'LIVE'}")
-        if self.config.disable_clickhouse:
-            logger.info("ClickHouse writes DISABLED (MQTT-only mode)")
         logger.info(f"Update mode: {self.config.homeassistant.mode}")
-
-        # Connect to MQTT
-        if not self.mqtt_publisher.connect():
-            logger.error("Failed to connect to MQTT broker")
-            return
-
-        # Connect to ClickHouse
-        if not self.clickhouse_writer.connect():
-            logger.warning("Failed to connect to ClickHouse - continuing without database writes")
 
         # Set node_name (friendly name like NODE_NAME in ESP32)
         if self.config.node_name:
@@ -169,11 +173,6 @@ class HomeAssistantIngester:
                     ws_task.cancel()
                     continue
 
-                # Start ClickHouse periodic flush
-                flush_task = asyncio.create_task(
-                    self.clickhouse_writer.start_periodic_flush()
-                )
-
                 # Wait for either WebSocket loop to finish OR stop signal
                 stop_wait_task = asyncio.create_task(self._stop_event.wait())
                 done, pending = await asyncio.wait(
@@ -189,12 +188,6 @@ class HomeAssistantIngester:
                     except asyncio.CancelledError:
                         pass
 
-                flush_task.cancel()
-                try:
-                    await flush_task
-                except asyncio.CancelledError:
-                    pass
-
             except asyncio.CancelledError:
                 break
             except Exception as e:
@@ -209,9 +202,6 @@ class HomeAssistantIngester:
             f"Starting polling mode (interval: {self.config.homeassistant.polling_interval_seconds}s)"
         )
 
-        # Start ClickHouse periodic flush
-        flush_task = asyncio.create_task(self.clickhouse_writer.start_periodic_flush())
-
         try:
             await self.ha_client.poll_states(
                 callback=self._handle_state_change,
@@ -219,8 +209,6 @@ class HomeAssistantIngester:
             )
         except asyncio.CancelledError:
             pass
-        finally:
-            flush_task.cancel()
 
     async def _handle_state_change(
         self,
@@ -288,15 +276,29 @@ class HomeAssistantIngester:
 
         self._stats["entities_processed"] += 1
 
-        # Build MQTT topic
-        topic = self.transformer.build_mqtt_topic(transformed)
-
-        # Publish to MQTT
-        if not self.mqtt_publisher.publish(topic, transformed):
-            self._stats["publish_failures"] += 1
-
-        # Write to ClickHouse
-        self.clickhouse_writer.write(transformed)
+        # Process each measurement through the pipeline (sign, MQTT publish, gateway POST)
+        for measurement in transformed.get("measurements", []):
+            self.pipeline.process({
+                "device_id": transformed["device_id"],
+                "timestamp": transformed["timestamp"],
+                "reading_type": measurement["reading_type"],
+                "value": measurement["value"],
+                "unit": measurement.get("unit", ""),
+                "latitude": transformed.get("latitude"),
+                "longitude": transformed.get("longitude"),
+                "altitude": transformed.get("altitude"),
+                "data_source": transformed.get("data_source", "home_assistant"),
+                "data_source_name": transformed.get("data_source_name", "Home Assistant"),
+                "sensor_transport": transformed.get("transport_type", ""),
+                "geo_country": transformed.get("country_code", ""),
+                "geo_subdivision": transformed.get("subdivision_code", ""),
+                "board_model": transformed.get("_meta", {}).get("device_class", ""),
+                "sensor_model": measurement.get("sensor_model", ""),
+                "deployment_type": transformed.get("deployment_type", "INDOOR"),
+                "deployment_type_source": "manual",
+                "node_name": transformed.get("node_name", ""),
+                "network_source": "api",
+            })
 
         logger.debug(
             f"Processed {entity_id} -> {transformed['measurements'][0]['reading_type']}: "
@@ -310,10 +312,10 @@ class HomeAssistantIngester:
         self._stop_event.set()  # Wake up any sleeping tasks
 
         await self.ha_client.close()
-        self.mqtt_publisher.disconnect()
-        self.clickhouse_writer.close()
+        self.pipeline.close()
 
         # Log final stats
+        pipeline_stats = self.pipeline.get_stats()
         logger.info("Final statistics:")
         logger.info(f"  State changes received: {self._stats['state_changes_received']}")
         logger.info(f"  Entities filtered: {self._stats['entities_filtered']}")
@@ -322,8 +324,7 @@ class HomeAssistantIngester:
         logger.info(f"  Future timestamps rejected: {self._stats['future_timestamps']}")
         logger.info(f"  Missing location rejected: {self._stats['missing_location']}")
         logger.info(f"  Publish failures: {self._stats['publish_failures']}")
-        logger.info(f"  MQTT messages: {self.mqtt_publisher.message_count}")
-        logger.info(f"  ClickHouse rows: {self.clickhouse_writer.total_written}")
+        logger.info(f"  Pipeline stats: {pipeline_stats}")
 
         if self.entity_filter:
             filter_stats = self.entity_filter.get_filter_stats()
