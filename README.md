@@ -157,4 +157,4 @@ WeSense ESP32 entities follow the pattern `sensor.{location}_{mac}_{type}` (e.g.
 
 ## License
 
-MIT
+AGPL-3.0

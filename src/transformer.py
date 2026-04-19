@@ -106,7 +106,8 @@ class Transformer:
             result = {
                 "device_id": device_id,
                 "node_name": node_name,  # Friendly name (like NODE_NAME in ESP32)
-                "data_source": "HOMEASSISTANT",
+                "data_source": "home_assistant",
+                "data_source_name": "Home Assistant",
                 "timestamp": timestamp,
                 "latitude": location["latitude"],
                 "longitude": location["longitude"],
@@ -211,36 +212,36 @@ class Transformer:
     def _infer_transport_type(self, platform: str) -> str:
         """Infer transport type from integration/platform name."""
         if not platform:
-            return "UNKNOWN"
+            return ""
         platform_lower = platform.lower()
 
         # WiFi-based integrations
         wifi_platforms = ["shelly", "tuya", "wiz", "esphome", "tasmota", "sonoff"]
         if any(p in platform_lower for p in wifi_platforms):
-            return "WIFI"
+            return "wifi"
 
         # Zigbee integrations
         zigbee_platforms = ["zha", "zigbee", "deconz", "zigbee2mqtt"]
         if any(p in platform_lower for p in zigbee_platforms):
-            return "ZIGBEE"
+            return "zigbee"
 
         # Z-Wave integrations
         zwave_platforms = ["zwave", "ozw"]
         if any(p in platform_lower for p in zwave_platforms):
-            return "ZWAVE"
+            return "zwave"
 
         # Bluetooth integrations
         bt_platforms = ["bluetooth", "ble", "switchbot"]
         if any(p in platform_lower for p in bt_platforms):
-            return "BLUETOOTH"
+            return "bluetooth"
 
         # Thread/Matter
         thread_platforms = ["matter", "thread"]
         if any(p in platform_lower for p in thread_platforms):
-            return "THREAD"
+            return "thread"
 
         # Default
-        return "UNKNOWN"
+        return ""
 
     def _parse_timestamp(self, timestamp_str: Optional[str]) -> int:
         """Parse timestamp string to Unix timestamp."""

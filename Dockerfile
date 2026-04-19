@@ -12,13 +12,16 @@ FROM python:3.11-slim
 
 WORKDIR /app
 
-# Copy dependency files first for better layer caching
+# Bust cache when ingester-core or app code changes
+ARG CACHE_BUST=1
+
 COPY wesense-ingester-core/ /tmp/wesense-ingester-core/
 COPY wesense-ingester-homeassistant/requirements-docker.txt .
 
 # Install gcc, build all pip packages, then remove gcc in one layer
 RUN apt-get update && \
     apt-get install -y --no-install-recommends gcc && \
+    pip install --no-cache-dir --upgrade pip && \
     pip install --no-cache-dir /tmp/wesense-ingester-core && \
     pip install --no-cache-dir -r requirements-docker.txt && \
     apt-get purge -y --auto-remove gcc && \
@@ -27,6 +30,8 @@ RUN apt-get update && \
 # Copy application code
 COPY wesense-ingester-homeassistant/src/ ./src/
 COPY wesense-ingester-homeassistant/run.py ./
+COPY wesense-ingester-homeassistant/entrypoint.sh /app/entrypoint.sh
+RUN chmod +x /app/entrypoint.sh
 
 # Create directories for runtime data
 RUN mkdir -p /app/logs /app/config
@@ -35,4 +40,4 @@ ENV PYTHONUNBUFFERED=1
 ENV PYTHONPATH=/app
 ENV TZ=UTC
 
-CMD ["python", "run.py"]
+ENTRYPOINT ["/app/entrypoint.sh"]
