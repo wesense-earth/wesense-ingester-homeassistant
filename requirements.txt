@@ -1,7 +1,7 @@
 # WeSense Home Assistant Ingester Dependencies
 
 # Async HTTP/WebSocket
-aiohttp>=3.9.0
+aiohttp>=3.14.5
 websockets>=12.0
 
 # MQTT
