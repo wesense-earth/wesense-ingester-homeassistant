@@ -5,7 +5,7 @@ aiohttp>=3.9.0
 websockets>=12.0
 
 # MQTT
-paho-mqtt>=2.0.0
+paho-mqtt>=2.1.0
 
 # ClickHouse (pinned to match meshtastic ingester)
 clickhouse-connect==0.8.14
