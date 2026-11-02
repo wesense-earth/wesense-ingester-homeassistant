@@ -12,7 +12,7 @@ clickhouse-connect==1.11.0
 
 # Configuration
 pyyaml>=6.0.3
-python-dotenv>=1.0.0
+python-dotenv>=1.2.4
 
 # Geocoding
 reverse_geocoder>=1.5.1
