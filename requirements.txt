@@ -8,7 +8,7 @@ websockets>=12.0
 paho-mqtt>=2.1.0
 
 # ClickHouse (pinned to match meshtastic ingester)
-clickhouse-connect==1.11.0
+clickhouse-connect==1.12.0
 
 # Configuration
 pyyaml>=6.0.3
